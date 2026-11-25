@@ -65,3 +65,7 @@ build/Glissade.app/Contents/MacOS/Glissade --self-test   # event handling
 - `Sources/App` – event interception, settings window, menu
 - `Checks` – physics checks
 - `Tools` – draws the app icon
+
+## License
+
+[MIT](LICENSE)
