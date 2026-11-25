@@ -21,6 +21,10 @@ enum SelfTest {
         var out: [CGEvent] = []
         var stamps: [CFTimeInterval] = []
         c.post = { out.append($0); stamps.append(CACurrentMediaTime()) }
+        // A fake pointer, so using the Mac during the test can't affect it.
+        var spot = NSPoint(x: 10, y: 10), win = 1
+        c.pointer = { spot }
+        c.windowAt = { _ in win }
         func total(_ field: CGEventField) -> Int { out.reduce(0) { $0 + Int($1.getIntegerValueField(field)) } }
         let y = CGEventField.scrollWheelEventPointDeltaAxis1, x = CGEventField.scrollWheelEventPointDeltaAxis2
         func reset() { c.stopGlide(); out = []; stamps = [] }
@@ -58,14 +62,26 @@ enum SelfTest {
         check(c.handle(.leftMouseDown, wheel(0)), "click passes through"); spin(0.4)
         check(out.count == before, "click stops the glide")
 
-        let win = NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0)
+        reset(); _ = c.handle(.scrollWheel, wheel(1)); spin(0.05)
+        spot.x += 5; spin(1)
+        check(total(y) == 100, "moving within a window keeps gliding", "\(total(y))")
+        reset(); _ = c.handle(.scrollWheel, wheel(1)); spin(0.05)
+        spot.x += 5; win = 2
+        let left = out.count; spin(0.4)
+        check(out.count == left && left > 0, "moving to another window stops the glide", "\(left), \(out.count)")
+
+        // Any real window will do for matching an app to its exclusion.
+        let spotted = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []).first {
+            ($0[kCGWindowOwnerPID as String] as? pid_t).flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier } != nil
+        }
+        win = spotted?[kCGWindowNumber as String] as? Int ?? 0
         let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(max(win, 0))) as? [[String: Any]]
         if let pid = info?.first?[kCGWindowOwnerPID as String] as? pid_t,
            let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier {
             prefs.values.excluded = [ExcludedApp(id: id, name: id)]
             check(c.handle(.scrollWheel, wheel(1)), "excluded app untouched")
             prefs.values.excluded = []
-        } else { print("skip  excluded app (no identifiable window under pointer)") }
+        } else { print("skip  excluded app (no identifiable window on screen)") }
 
         reset()
         print(failures == 0 ? "\nSelf-test passed." : "\n\(failures) FAILED")

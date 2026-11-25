@@ -32,8 +32,10 @@ final class ScrollController: NSObject, ObservableObject {
     static let marker: Int64 = 0x474C_4944_45
     private let eventSource = CGEventSource(stateID: .privateState)
 
-    /// Where finished events go. Replaced by the self-test.
+    // Connections to the system. Replaced by the self-test.
     var post: (CGEvent) -> Void = { $0.post(tap: .cgSessionEventTap) }
+    var pointer: () -> NSPoint = { NSEvent.mouseLocation }
+    var windowAt: (NSPoint) -> Int = { NSWindow.windowNumber(at: $0, belowWindowWithWindowNumber: 0) }
 
     init(preferences: Preferences) {
         self.preferences = preferences
@@ -178,7 +180,7 @@ final class ScrollController: NSObject, ObservableObject {
         }
         if window != glideWindow { engine.stop() }
         glideWindow = window
-        lastPointer = NSEvent.mouseLocation
+        lastPointer = pointer()
         glideFlags = outFlags
 
         let sign = settings.reverseWheel ? -1 : 1
@@ -198,7 +200,7 @@ final class ScrollController: NSObject, ObservableObject {
     }
 
     private func windowUnderPointer() -> Int {
-        NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0)
+        windowAt(pointer())
     }
 
     private func isExcluded(window: Int, _ apps: [ExcludedApp]) -> Bool {
@@ -216,7 +218,7 @@ final class ScrollController: NSObject, ObservableObject {
 
     private func startGlide() {
         guard link == nil else { return }
-        let pointer = NSEvent.mouseLocation
+        let pointer = self.pointer()
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(pointer) }) ?? NSScreen.main else {
             engine.stop()
             return
@@ -241,7 +243,7 @@ final class ScrollController: NSObject, ObservableObject {
 
     @objc private func frame(_ link: CADisplayLink) {
         // Don't spill a glide into whatever the pointer has moved onto.
-        let pointer = NSEvent.mouseLocation
+        let pointer = self.pointer()
         if pointer != lastPointer {
             lastPointer = pointer
             if windowUnderPointer() != glideWindow {
